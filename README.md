@@ -1,6 +1,40 @@
 # fastapi-ticker-hub
 
-A minimal FastAPI + Socket.IO service that polls market prices and serves them via REST and WebSocket rooms.
+A minimal FastAPI service that polls market prices (and news) and serves them via REST endpoints and raw WebSockets.
+
+---
+
+## Client example
+
+```js
+const socket = new WebSocket("ws://localhost:8000/ws/prices");
+
+// Listen for errors
+socket.addEventListener("error", (event) => {
+  console.log("WebSocket error:", event);
+});
+
+// Handle incoming messages
+socket.addEventListener("message", (event) => {
+  try {
+    const payload = JSON.parse(event.data);
+    console.log("Price update:", payload);
+  } catch (err) {
+    console.warn("Non-JSON message:", event.data);
+  }
+});
+
+// On open, send a heartbeat every 30s so the server-side receive loop doesn’t stall
+socket.addEventListener("open", () => {
+  console.log("WebSocket open");
+  setInterval(() => socket.send("ping"), 30000);
+});
+
+// Log closes
+socket.addEventListener("close", (event) => {
+  console.log("WebSocket close:", event);
+});
+```
 
 ## Prerequisites
 
@@ -29,7 +63,12 @@ uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - `GET /tickers` – list all prices
 - `GET /tickers/{symbol}` – single ticker data
 
-WebSocket namespace for real-time updates: connect to `ws://localhost:8000/ws and emit { "room": "prices" } or { "room": "news" }`.
+## WebSocket endpoints
+
+-- Prices: ws://localhost:8000/ws/prices
+-- News: ws://localhost:8000/ws/news
+
+Clients should accept the connection and will immediately receive the current full snapshot (`state.prices` or `state.news`), then only incremental updates as JSON objects.
 
 ## Docker Compose
 
@@ -40,7 +79,7 @@ docker compose up --build
 ```
 
 - API available at `http://localhost:8000`
-- Redis at `localhost:6379`
+- WebSocket endpoints at `ws://localhost:8000/ws/prices` and `/ws/news`
 
 ## Testing
 
