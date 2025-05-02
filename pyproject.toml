@@ -1,0 +1,30 @@
+[project]
+name = "fastapi-ticker-hub"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.115.12",
+    "gunicorn>=23.0.0",
+    "httpx>=0.28.1",
+    "pydantic>=2.11.4",
+    "pydantic-settings>=2.9.1",
+    "python-dotenv>=1.1.0",
+    "python-socketio>=5.13.0",
+    "redis>=6.0.0",
+    "uvicorn[standard]>=0.34.2",
+    "yfinance>=0.2.57",
+]
+
+[dependency-groups]
+dev = [
+    "black>=25.1.0",
+    "isort>=6.0.1",
+    "pytest>=8.3.5",
+    "pytest-asyncio>=0.26.0",
+]
+
+[tool.pytest.ini_options]
+# pick one of: "function", "class", "module", "package", "session"
+asyncio_default_fixture_loop_scope = "function"
