@@ -14,8 +14,6 @@ class Settings:
         self.TICKERS = [s.strip() for s in raw.split(',') if s.strip()]
         # Polling interval in seconds (default 5)
         self.POLL_FREQ = int(os.getenv("POLL_FREQ", "5"))
-        # Optional Redis URL for scaling
-        self.REDIS_URL = os.getenv("REDIS_URL")
 
 # Instantiate settings
 settings = Settings()

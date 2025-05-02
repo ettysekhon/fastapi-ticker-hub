@@ -1,16 +1,9 @@
 version: '3.8'
 services:
-  redis:
-    image: redis:7-alpine
-    ports:
-      - '6379:6379'
   api:
     build: .
     environment:
-      - REDIS_URL=redis://redis:6379/0
       - TICKERS=GC=F,CL=F,BZ=F,SI=F
       - POLL_FREQ=5
-    depends_on:
-      - redis
     ports:
       - '8000:8000'

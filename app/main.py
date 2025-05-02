@@ -1,11 +1,13 @@
 import asyncio
 import contextlib
 import logging
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from .socket import app as socket_app
+
 from .state import state
 from .polling import poll_loop
+from .socket import manager
 
 logging.basicConfig(
     level=logging.INFO,
@@ -15,18 +17,22 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """Start background tasks and ensure clean shutdown."""
     logger.info("Starting poll loop")
-    poll_task = asyncio.create_task(poll_loop())
+    task = asyncio.create_task(poll_loop())
     yield
     logger.info("Shutting down poll loop")
-    poll_task.cancel()
+    task.cancel()
     with contextlib.suppress(asyncio.CancelledError):
-        await poll_task
+        await task
 
 app = FastAPI(lifespan=lifespan)
-# Mount the Socket.IO ASGI app under '/ws'
-app.mount("/ws", socket_app)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/tickers")
 def get_all():
@@ -40,3 +46,32 @@ def get_one(symbol: str):
         logger.warning(f"Ticker not found: {symbol}")
         raise HTTPException(status_code=404, detail="Ticker not found")
     return state.prices[symbol]
+
+async def _ws_endpoint(websocket: WebSocket, room: str):
+    await manager.connect(websocket, room)
+    try:
+        # keep the connection open indefinitely
+        while True:
+            await asyncio.sleep(3600)
+    except Exception:
+        pass
+    finally:
+        manager.disconnect(websocket, room)
+
+@app.websocket("/ws/prices")
+async def ws_prices(ws: WebSocket):
+    await manager.connect(ws, "prices")
+    try:
+        while True:
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(ws)
+
+@app.websocket("/ws/news")
+async def ws_news(ws: WebSocket):
+    await manager.connect(ws, "news")
+    try:
+        while True:
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(ws)

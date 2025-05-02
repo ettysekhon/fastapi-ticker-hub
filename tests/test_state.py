@@ -1,25 +1,62 @@
 import pytest
+from app import state as state_module
 from app.state import state, publish_price_changes
 
-class DummySio:
+class DummyManager:
     def __init__(self):
-        self.events = []
-    async def emit(self, event, data, room=None):
-        self.events.append((event, data, room))
+        self.calls = []
+
+    async def broadcast(self, room, data):
+        # record (room, data) tuples
+        self.calls.append((room, data))
 
 @pytest.mark.asyncio
 async def test_publish_price_changes(monkeypatch):
+    # 1) Seed initial state
     state.prices = {"A": {"price": 1, "ts": 0, "raw": {}}}
-    dummy = DummySio()
-    monkeypatch.setattr("app.state.sio", dummy)
 
-    new = {
+    # 2) Swap out the real manager for our dummy
+    dummy = DummyManager()
+    monkeypatch.setattr(state_module, 'manager', dummy)
+
+    # 3) New fetched prices, A changed, B is new
+    new_prices = {
         "A": {"price": 2, "ts": 1, "raw": {}},
-        "B": {"price": 3, "ts": 1, "raw": {}}
+        "B": {"price": 3, "ts": 1, "raw": {}},
     }
-    await publish_price_changes(new)
 
-    # Ensure at least one emit to the 'prices' room
-    assert any(evt[2] == "prices" for evt in dummy.events)
-    # Ensure diffs contain both A and B
-    assert "A" in dummy.events[0][1] and "B" in dummy.events[0][1]
+    # Act
+    await publish_price_changes(new_prices)
+
+    # 4) State should have been updated
+    assert state.prices == new_prices
+
+    # 5) Exactly one broadcast call
+    assert len(dummy.calls) == 1
+
+    room, data = dummy.calls[0]
+    # Must broadcast on "prices"
+    assert room == "prices"
+
+    # Diffs should include both symbols A and B
+    assert set(data.keys()) == {"A", "B"}
+
+@pytest.mark.asyncio
+async def test_publish_price_changes_no_diff(monkeypatch):
+    # 1) Seed initial state where nothing changes
+    state.prices = {"A": {"price": 1, "ts": 0, "raw": {}}}
+
+    dummy = DummyManager()
+    monkeypatch.setattr(state_module, 'manager', dummy)
+
+    # 2) New is identical to old
+    new_prices = {"A": {"price": 1, "ts": 5, "raw": {}}}
+
+    # Act
+    await publish_price_changes(new_prices)
+
+    # State still updates behind the scenes
+    assert state.prices == new_prices
+
+    # But no broadcast was called, since price is unchanged
+    assert dummy.calls == []
