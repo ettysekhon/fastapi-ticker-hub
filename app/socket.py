@@ -14,18 +14,18 @@ class ConnectionManager:
         self.lock = asyncio.Lock()
 
     async def connect(self, ws: WebSocket, room: str) -> None:
-        await ws.accept()
-
         if room not in self.rooms:
             logger.warning(f"Attempted to connect to unknown room: {room}")
             return
+
+        await ws.accept()
 
         async with self.lock:
             self.rooms[room].add(ws)
 
         logger.info(f"Client connected to room: {room}")
 
-        # Defer import to avoid circular dependency (ideally restructure)
+# Defer import to avoid circular dependency (ideally restructure)
         from .state import state
         if room == "prices":
             logger.info("Sending initial prices snapshot to new client")

@@ -1,5 +1,4 @@
 import pytest
-import asyncio
 from app.socket import ConnectionManager
 from app.state import state
 
@@ -25,10 +24,30 @@ async def test_connect_sends_initial_snapshot_and_registers():
     # Act
     await cm.connect(ws, "prices")
     # Assert
-    assert ws.accepted, "WebSocket.accept() was not called"
+    assert ws.accepted, "Expected WebSocket.accept() to be called during connect()"
     assert ws in cm.rooms["prices"], "WebSocket was not registered in 'prices' room"
     # The first message should be the full snapshot
     assert ws.sent == [state.prices]
+
+@pytest.mark.asyncio
+async def test_connect_invalid_room_does_not_register_websocket(caplog):
+    cm = ConnectionManager()
+    ws = DummyWebSocket()
+
+    # Capture logs for validation
+    with caplog.at_level("WARNING"):
+        await cm.connect(ws, "invalid_room")
+
+    # WebSocket should not be accepted
+    assert not ws.accepted, "WebSocket should not be accepted for an invalid room"
+
+    # It should not be added to any room
+    for room in cm.rooms:
+        assert ws not in cm.rooms[room], f"WebSocket was incorrectly added to room '{room}'"
+
+    # Log should contain a warning
+    assert any("invalid_room" in msg for msg in caplog.messages), "Missing log about invalid room"
+
 
 @pytest.mark.asyncio
 async def test_broadcast_to_all_clients_and_cleanup_on_error(monkeypatch):
