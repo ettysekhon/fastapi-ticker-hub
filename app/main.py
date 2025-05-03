@@ -26,6 +26,7 @@ async def lifespan(_app: FastAPI):
         await task
 
 app = FastAPI(lifespan=lifespan)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -35,43 +36,31 @@ app.add_middleware(
 )
 
 @app.get("/tickers")
-def get_all():
+async def get_all():
     logger.debug("GET /tickers called")
-    return state.prices
+    return await state.get_prices()
 
 @app.get("/tickers/{symbol}")
-def get_one(symbol: str):
+async def get_one(symbol: str):
     logger.debug(f"GET /tickers/{symbol} called")
-    if symbol not in state.prices:
+    prices = await state.get_prices()
+    if symbol not in prices:
         logger.warning(f"Ticker not found: {symbol}")
         raise HTTPException(status_code=404, detail="Ticker not found")
-    return state.prices[symbol]
+    return prices[symbol]
 
-async def _ws_endpoint(websocket: WebSocket, room: str):
-    await manager.connect(websocket, room)
+async def websocket_loop(ws: WebSocket, room: str):
+    await manager.connect(ws, room)
     try:
-        # keep the connection open indefinitely
         while True:
-            await asyncio.sleep(3600)
-    except Exception:
-        pass
-    finally:
-        manager.disconnect(websocket, room)
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        await manager.disconnect(ws)
 
 @app.websocket("/ws/prices")
 async def ws_prices(ws: WebSocket):
-    await manager.connect(ws, "prices")
-    try:
-        while True:
-            await ws.receive_text()
-    except WebSocketDisconnect:
-        manager.disconnect(ws)
+    await websocket_loop(ws, "prices")
 
 @app.websocket("/ws/news")
 async def ws_news(ws: WebSocket):
-    await manager.connect(ws, "news")
-    try:
-        while True:
-            await ws.receive_text()
-    except WebSocketDisconnect:
-        manager.disconnect(ws)
+    await websocket_loop(ws, "news")

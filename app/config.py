@@ -1,19 +1,21 @@
 import os
-from dotenv import load_dotenv
+import logging
+from pydantic_settings import BaseSettings
+from pydantic import Field
 
-# Load environment variables from .env
-load_dotenv()
+logger = logging.getLogger(__name__)
 
-class Settings:
-    """
-    Simple environment-based configuration.
-    """
-    def __init__(self):
-        # Comma-separated list of ticker symbols
-        raw = os.getenv("TICKERS", "")
-        self.TICKERS = [s.strip() for s in raw.split(',') if s.strip()]
-        # Polling interval in seconds (default 5)
-        self.POLL_FREQ = int(os.getenv("POLL_FREQ", "5"))
+class Settings(BaseSettings):
+    TICKERS: str = ""
+    POLL_FREQ: int = Field(default=5, ge=1)
 
-# Instantiate settings
+    @property
+    def tickers_list(self):
+        return [s.strip() for s in self.TICKERS.split(",") if s.strip()]
+
+    model_config = {
+        "env_file": ".env"
+    }
+
 settings = Settings()
+logger.info(f"Loaded config: TICKERS={settings.tickers_list}, POLL_FREQ={settings.POLL_FREQ}")

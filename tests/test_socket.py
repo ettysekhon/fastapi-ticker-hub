@@ -57,12 +57,11 @@ async def test_broadcast_to_all_clients_and_cleanup_on_error(monkeypatch):
 async def test_disconnect_removes_websocket_from_all_rooms():
     cm = ConnectionManager()
     ws = DummyWebSocket()
-    # Manually put ws into both rooms
     cm.rooms["prices"].add(ws)
     cm.rooms["news"].add(ws)
 
     # Act
-    cm.disconnect(ws)
+    await cm.disconnect(ws)
 
     # Assert
     assert ws not in cm.rooms["prices"]
