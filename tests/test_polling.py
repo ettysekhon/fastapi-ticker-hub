@@ -23,7 +23,15 @@ async def test_poll_loop_once(monkeypatch):
 
     async def fake_fetch(tickers):
         calls.append(True)
-        return {t: {"price": 1, "ts": 0, "raw": {}} for t in tickers}
+        return {
+        t: {
+            "price": 1,
+            "marketTime": "2025-05-03T00:00:00Z",
+            "publishedTime": "2025-05-03T00:00:00Z",
+            "meta": {}
+        } for t in tickers
+    }
+
 
     # Patch both fetch_prices *and* the publish function in polling's namespace
     monkeypatch.setattr("app.polling.fetch_prices", fake_fetch)

@@ -84,10 +84,7 @@ async def fetch_prices(tickers: list[str]) -> Dict[str, Dict[str, Any]]:
                 meta = slim_info(info)
                 price = meta.get("price")
 
-                market_epoch = info["regularMarketTime"]
-                if not market_epoch:
-                    logger.warning(f"No market time for {symbol}")
-                    market_epoch = int(time.time())
+                market_epoch = info.get("regularMarketTime", int(time.time()))
                 market_dt = datetime.fromtimestamp(market_epoch, tz=timezone.utc).replace(microsecond=0)
                 market_iso = market_dt.isoformat().replace("+00:00", "Z")
 
