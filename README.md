@@ -1,5 +1,7 @@
 # fastapi-ticker-hub
 
+[![CI](https://github.com/ettysekhon/fastapi-ticker-hub/actions/workflows/ci.yml/badge.svg)](https://github.com/ettysekhon/fastapi-ticker-hub/actions/workflows/ci.yml)
+
 A minimal FastAPI service that polls market prices (and news) and serves them via REST endpoints and raw WebSockets.
 
 ---
