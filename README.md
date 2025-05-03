@@ -52,6 +52,8 @@ Dependencies are already declared in `pyproject.toml` and `uv.lock`. Simply inst
 uv sync
 ```
 
+If you don't have `uv` installed then follow install instructions [here](https://docs.astral.sh/uv/getting-started/installation/).
+
 ## How It Works
 
 1. **Configuration**  
