@@ -72,7 +72,7 @@ Clients should accept the connection and will immediately receive the current fu
 
 ## Docker Compose
 
-Build and run with Redis:
+Build and run:
 
 ```bash
 docker compose up --build

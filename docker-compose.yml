@@ -3,7 +3,7 @@ services:
   api:
     build: .
     environment:
-      - TICKERS=GC=F,CL=F,BZ=F,SI=F
+      - TICKERS=CL=F,BZ=F,GC=F,SI=F,NG=F,HO=F,RB=F,XOM,CVX,COP,OXY,EOG,KMI,PSX,VLO,USO
       - POLL_FREQ=5
     ports:
       - '8000:8000'
