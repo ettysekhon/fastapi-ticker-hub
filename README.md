@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/ettysekhon/fastapi-ticker-hub/actions/workflows/ci.yml/badge.svg)](https://github.com/ettysekhon/fastapi-ticker-hub/actions/workflows/ci.yml)
 
-A minimal FastAPI service that polls market prices (and news) and serves them via REST endpoints and raw WebSockets.
+A minimal FastAPI service that polls market prices (and news) and serves them via REST endpoints and raw WebSockets. Additionally it supports customised subscriptions with per-connection watchlist.
 
 ---
 
@@ -11,12 +11,12 @@ A minimal FastAPI service that polls market prices (and news) and serves them vi
 ```js
 const socket = new WebSocket("ws://localhost:8000/ws/prices");
 
-// Listen for errors
+// Handle errors
 socket.addEventListener("error", (event) => {
   console.log("WebSocket error:", event);
 });
 
-// Handle incoming messages
+// Receive initial snapshot or updates (diffs)
 socket.addEventListener("message", (event) => {
   try {
     const payload = JSON.parse(event.data);
@@ -26,13 +26,15 @@ socket.addEventListener("message", (event) => {
   }
 });
 
-// On open, send a heartbeat every 30s so the server-side receive loop doesn’t stall
+// Keep connection alive with heartbeat
 socket.addEventListener("open", () => {
   console.log("WebSocket open");
   setInterval(() => socket.send("ping"), 30000);
+  // Optionally, set a custom watchlist right after connecting:
+  const myWatchlist = { watchlist: ["AAPL", "MSFT"] };
+  socket.send(JSON.stringify(myWatchlist));
 });
 
-// Log closes
 socket.addEventListener("close", (event) => {
   console.log("WebSocket close:", event);
 });
@@ -40,63 +42,60 @@ socket.addEventListener("close", (event) => {
 
 ## Prerequisites
 
-- Python 3.11+ installed
-- Docker & Docker Compose (for containerized mode)
-- `uv` CLI installed (optional but recommended)
-
-## Setup
-
-Dependencies are already declared in `pyproject.toml` and `uv.lock`. Simply install them:
-
-```bash
-uv sync
-```
-
-If you don't have `uv` installed then follow install instructions [here](https://docs.astral.sh/uv/getting-started/installation/).
+- Python 3.13+ installed
+- Docker & Docker Compose (for containerised mode)
 
 ## How It Works
 
 1. **Configuration**  
-   - Reads `TICKERS` and `POLL_FREQ` from environment (or `.env`).  
+   - Reads `TICKERS`, `POLL_FREQ` and `REDIS_URL` from environment (or `.env`).  
    - Builds a list of symbols to poll.
 
-2. **Polling Loop**  
-   - On startup, launches an `asyncio` background task that:
+2. **Polling Loop (poller service)**  
+   - On startup of the poller service (when using Docker Compose), an asyncio background task is launched that:
 
      ```python
      while True:
-         data = await fetch_prices(TICKERS)       # runs yfinance calls in a threadpool
-         await publish_price_changes(data)  # computes diffs & broadcasts to WS clients
-         await asyncio.sleep(POLL_FREQ)
+        # runs yfinance calls in a threadpool
+        data = await fetch_prices(TICKERS)
+        # computes diffs & broadcasts to WS clients
+        await publish_price_changes(data)
+        await asyncio.sleep(POLL_FREQ)
      ```
 
-   - Keeps the REST API and WebSocket server responsive by off‐loading blocking I/O to threads.
+   - Uses exponential backoff on errors, reset after successful fetch.
+   - Stores the latest full snapshot in a Redis hash (key prices).
+   - Publishes incremental diffs on a Redis pub/sub channel (prices).
 
-3. **REST API**  
-   - `GET /tickers` → returns the current snapshot of all prices.  
-   - `GET /tickers/{symbol}` → returns a single symbol's latest data.
+3. **REST API (api service)**  
+   - `GET /tickers` returns the current snapshot of all prices.  
+   - `GET /tickers/{symbol}` returns a single symbol's latest data.
 
-4. **WebSockets**  
+4. **WebSockets & Watchlists (api service)**  
    - Two endpoints:  
-     - `/ws/prices` — push real-time price diffs  
-     - `/ws/news`   — push any news items  
-   - When a client connects, it immediately receives the full current state, then only incremental updates.
+     - `/ws/prices` — publish real-time price diffs  
+     - `/ws/news`   — publish any news items  
+   - **Default:** on connect, clients receive the full current state of all symbols, then only diffs.
+   - **Per-connection watchlist:** clients may send:
 
-## Running Locally
+    ```javascript
+    { "watchlist": ["AAPL", "MSFT", ...] }
+    ```
 
-Start the API with hot reload:
+    to subscribe only to those symbols. They then receive:
+
+    - A fresh filtered snapshot from Redis.
+    - Subsequent diffs only for symbols in their watchlist.
+
+## Quick start (Docker Compose)
+
+Simply clone the repo and run make start:
 
 ```bash
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+make start
 ```
 
-## Docker Compose
-
-Build and run:
-
-```bash
-docker compose up --build
-```
+which simply builds and runs with `docker compose up --build`. All dependencies are declared in `pyproject.toml` and `uv.lock` and are installed via [uv](https://docs.astral.sh/uv/getting-started/installation/) in the `Dockerfile`.
 
 - API available at `http://localhost:8000`
 - WebSocket endpoints at `ws://localhost:8000/ws/prices` and `/ws/news`
