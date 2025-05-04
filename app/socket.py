@@ -1,7 +1,7 @@
 import asyncio
 import logging
 
-from fastapi import WebSocket
+from fastapi import WebSocket, WebSocketDisconnect
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +13,7 @@ class ConnectionManager:
             "news": set(),
         }
         self.queues: dict[WebSocket, asyncio.Queue] = {}
+        self.filters: dict[WebSocket, set[str] | None] = {}
         self.sender_tasks: dict[WebSocket, asyncio.Task] = {}
         self.lock = asyncio.Lock()
 
@@ -27,61 +28,50 @@ class ConnectionManager:
         async with self.lock:
             self.rooms[room].add(ws)
             self.queues[ws] = asyncio.Queue(maxsize=100)
+            self.filters[ws] = None  # None means “send me everything”
 
-        logger.info(f"Client connected to room: {room}")
+        # send initial snapshot (unfiltered)
+        snapshot = await state.get_prices() if room == "prices" else await state.get_news()
+        await ws.send_json(snapshot)
 
-        # Send initial snapshot
-        if room == "prices":
-            await ws.send_json(await state.get_prices())
-        else:
-            await ws.send_json(await state.get_news())
-
-        # Start background sender
+        # start existing _sender(...)
         self.sender_tasks[ws] = asyncio.create_task(self._sender(ws))
 
-    async def _sender(self, ws: WebSocket) -> None:
+    async def _sender(self, ws: WebSocket):
+        queue = self.queues[ws]
         try:
-            queue = self.queues.get(ws)
-            if not queue:
-                return
             while True:
-                message = await queue.get()
-                await ws.send_json(message)
-        except asyncio.CancelledError:
-            # our own cancellation: stop quietly
-            return
-        except Exception as e:
-            logger.warning(f"Sender error for WebSocket: {e}")
+                msg = await queue.get()
+                await ws.send_json(msg)
+        except (WebSocketDisconnect, asyncio.CancelledError):
+            pass
         finally:
             await self.disconnect(ws)
 
-    async def disconnect(self, ws: WebSocket) -> None:
+    async def disconnect(self, ws: WebSocket):
         async with self.lock:
             for room in self.rooms.values():
                 room.discard(ws)
             self.queues.pop(ws, None)
+            self.filters.pop(ws, None)
             task = self.sender_tasks.pop(ws, None)
             if task:
                 task.cancel()
         logger.info("Client fully disconnected")
 
-    async def broadcast(self, room: str, message: dict) -> None:
-        if room not in self.rooms:
-            logger.warning(f"Attempted to broadcast to unknown room: {room}")
-            return
-
-        # Copy recipients under lock
+    async def broadcast(self, room: str, message: dict):
         async with self.lock:
             recipients = list(self.rooms[room])
 
         for ws in recipients:
-            queue = self.queues.get(ws)
-            if not queue:
+            flt = self.filters.get(ws)
+            sym = message.get("symbol")
+            # if they’ve set a watchlist, skip others
+            if flt is not None and sym not in flt:
                 continue
 
-            # Enqueue for the background sender
             try:
-                queue.put_nowait(message)
+                self.queues[ws].put_nowait(message)
             except asyncio.QueueFull:
                 logger.warning("Dropping message for slow client")
                 await self.disconnect(ws)

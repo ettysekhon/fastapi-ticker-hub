@@ -1,3 +1,4 @@
+import json
 import logging
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
@@ -24,12 +25,25 @@ async def websocket_loop(ws: WebSocket, room: str):
     try:
         while True:
             try:
-                await ws.receive_text()
+                raw = await ws.receive_text()
             except WebSocketDisconnect:
-                raise
-            except Exception as e:
-                logger.error(f"Error in websocket loop for room={room}: {e}")
                 break
+
+            try:
+                req = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+
+            if "watchlist" in req:
+                wl = set(req["watchlist"])
+                shared.manager.filters[ws] = wl
+
+                current = await shared.state.get_prices()
+                filtered = {s: current[s] for s in wl if s in current}
+                await ws.send_json(filtered)
+
+    except Exception as e:
+        logger.error(f"Error in websocket loop for room={room}: {e}")
     finally:
         await shared.manager.disconnect(ws)
 
