@@ -1,22 +1,27 @@
+import pytest
 from fastapi.testclient import TestClient
-from app.main import app
-from app.state import state
 
-client = TestClient(app)
 
-def test_get_all_empty():
-    state.prices = {}
-    r = client.get("/tickers")
-    assert r.status_code == 200
-    assert r.json() == {}
+@pytest.fixture
+def client():
+    from app.main import app  # Delayed import
 
-def test_get_one_not_found():
-    state.prices = {}
-    r = client.get("/tickers/NOTHING")
-    assert r.status_code == 404
+    return TestClient(app)
 
-def test_get_one_success():
-    state.prices = {"FOO": {"price": 9, "ts": 0, "raw": {}}}
-    r = client.get("/tickers/FOO")
-    assert r.status_code == 200
-    assert r.json()["price"] == 9
+
+def test_get_all_empty(client):
+    response = client.get("/tickers")
+    assert response.status_code == 200
+    assert response.json() == {}
+
+
+def test_get_one_not_found(client):
+    response = client.get("/tickers/NOSYMBOL")
+    assert response.status_code == 404
+
+
+def test_get_one_success(client, fake_state):
+    fake_state["FOO"] = {"price": 9, "ts": 0, "meta": {}}
+    response = client.get("/tickers/FOO")
+    assert response.status_code == 200
+    assert response.json()["price"] == 9

@@ -1,49 +1,63 @@
 import asyncio
+
 import pytest
-from app.polling import fetch_prices, poll_loop
+
 from app.config import settings
+from app.polling import fetch_prices, poll_loop
+
 
 class DummyTicker:
     fast_info = type("X", (), {"last_price": 2.5})
-    info = {"regularMarketPrice": 2.5}
+    info = {"regularMarketPrice": 2.5, "quoteType": "equity", "regularMarketTime": 1714680000}
+
 
 @pytest.mark.asyncio
 async def test_fetch_prices(monkeypatch):
     import yfinance
+
     monkeypatch.setattr(yfinance, "Ticker", lambda sym: DummyTicker())
 
     result = await fetch_prices(["SYM"])
     assert "SYM" in result
     assert result["SYM"]["price"] == 2.5
+    assert "marketTime" in result["SYM"]
+    assert "publishedTime" in result["SYM"]
+    assert isinstance(result["SYM"]["meta"], dict)
+
 
 @pytest.mark.asyncio
 async def test_poll_loop_once(monkeypatch):
-    # Track that fetch_prices gets called
     calls = []
 
     async def fake_fetch(tickers):
-        calls.append(True)
+        calls.append("fetched")
         return {
-        t: {
-            "price": 1,
-            "marketTime": "2025-05-03T00:00:00Z",
-            "publishedTime": "2025-05-03T00:00:00Z",
-            "meta": {}
-        } for t in tickers
-    }
+            t: {
+                "price": 1,
+                "marketTime": "2025-05-03T00:00:00Z",
+                "publishedTime": "2025-05-03T00:00:00Z",
+                "meta": {},
+            }
+            for t in tickers
+        }
 
+    # Prevent actual Redis/publish
+    async def fake_publish(data):
+        calls.append("published")
+        await asyncio.sleep(0)
 
-    # Patch both fetch_prices *and* the publish function in polling's namespace
     monkeypatch.setattr("app.polling.fetch_prices", fake_fetch)
-    monkeypatch.setattr("app.polling.publish_price_changes", lambda data: asyncio.sleep(0))
+    monkeypatch.setattr("app.polling.publish_price_changes", fake_publish)
 
-    # Make poll loop run immediately
-    settings.POLL_FREQ = 0
+    # Reduce backoff to zero for testing
+    monkeypatch.setattr(settings, "POLL_FREQ", 0)
 
-    # Run one iteration then cancel
+    # Run a single iteration and cancel
     task = asyncio.create_task(poll_loop())
     asyncio.get_event_loop().call_later(0.1, task.cancel)
+
     with pytest.raises(asyncio.CancelledError):
         await task
 
-    assert calls, "poll_loop did not call fetch_prices"
+    assert "fetched" in calls, "poll_loop did not call fetch_prices"
+    assert "published" in calls, "poll_loop did not call publish_price_changes"

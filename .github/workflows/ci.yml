@@ -37,9 +37,9 @@ jobs:
           pip install uv
           uv sync
 
-      - name: Run pytest
+      - name: Run formatter linter and pytest
         run: |
-          uv run pytest -q
+          make ci
 
   docker-build:
     name: Build Docker image

@@ -1,12 +1,14 @@
 import asyncio
-import time
 import logging
-from typing import Dict, Any
+import time
+from datetime import UTC, datetime
+from typing import Any
+
 import yfinance as yf
 from fastapi.concurrency import run_in_threadpool
+
 from .config import settings
-from .state import publish_price_changes
-from datetime import datetime, timezone
+from .publisher import publish_price_changes
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +34,10 @@ OPTIONS_EXTRA = {
     "optionType": "optionType",
 }
 
-def slim_info(info: Dict[str, Any]) -> Dict[str, Any]:
+
+def slim_info(info: dict[str, Any]) -> dict[str, Any]:
     """Pick just the fields we need based on quoteType."""
-    out: Dict[str, Any] = {}
+    out: dict[str, Any] = {}
     for out_key, info_key in COMMON.items():
         out[out_key] = info.get(info_key)
 
@@ -47,11 +50,13 @@ def slim_info(info: Dict[str, Any]) -> Dict[str, Any]:
             out[out_key] = info.get(info_key)
     return out
 
+
 async def poll_loop():
     """
     Fetch prices at regular intervals and publish any diffs.
     """
     backoff = settings.POLL_FREQ
+    logger.info(f"Started polling loop in task: {asyncio.current_task().get_name()}")
     while True:
         try:
             new_prices = await fetch_prices(settings.tickers_list)
@@ -59,14 +64,14 @@ async def poll_loop():
                 logger.warning("No prices fetched")
             logger.debug(f"Fetched prices: {new_prices}")
             await publish_price_changes(new_prices)
-            logger.info("Publishing price changes")
             backoff = settings.POLL_FREQ  # reset backoff after success
         except Exception:
             logger.exception("Unexpected error during polling")
             backoff = min(backoff * 2, 60)  # simple exponential backoff
         await asyncio.sleep(backoff)
 
-async def fetch_prices(tickers: list[str]) -> Dict[str, Dict[str, Any]]:
+
+async def fetch_prices(tickers: list[str]) -> dict[str, dict[str, Any]]:
     """
     Synchronously fetches prices using yfinance in an async-compatible way.
     Returns { symbol: { price, ts, meta } }.
@@ -76,9 +81,9 @@ async def fetch_prices(tickers: list[str]) -> Dict[str, Dict[str, Any]]:
         logger.warning("Empty ticker list passed to fetch_prices()")
         return {}
 
-    def sync_fetch() -> Dict[str, Dict[str, Any]]:
-        results: Dict[str, Dict[str, Any]] = {}
-        now_utc = datetime.now(timezone.utc).replace(microsecond=0)
+    def sync_fetch() -> dict[str, dict[str, Any]]:
+        results: dict[str, dict[str, Any]] = {}
+        now_utc = datetime.now(UTC).replace(microsecond=0)
         now_iso = now_utc.isoformat() + "Z"
 
         for symbol in tickers:
@@ -89,14 +94,14 @@ async def fetch_prices(tickers: list[str]) -> Dict[str, Dict[str, Any]]:
                 price = meta.get("price")
 
                 market_epoch = info.get("regularMarketTime", int(time.time()))
-                market_dt = datetime.fromtimestamp(market_epoch, tz=timezone.utc).replace(microsecond=0)
+                market_dt = datetime.fromtimestamp(market_epoch, tz=UTC).replace(microsecond=0)
                 market_iso = market_dt.isoformat().replace("+00:00", "Z")
 
                 results[symbol] = {
                     "price": price,
                     "marketTime": market_iso,
                     "publishedTime": now_iso,
-                    "meta": meta
+                    "meta": meta,
                 }
                 logger.debug(f"Fetched {symbol}: {price} at {now_iso}")
             except Exception as err:

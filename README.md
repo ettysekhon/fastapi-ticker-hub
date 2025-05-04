@@ -66,7 +66,7 @@ If you don't have `uv` installed then follow install instructions [here](https:/
      ```python
      while True:
          data = await fetch_prices(TICKERS)       # runs yfinance calls in a threadpool
-         await publish_price_changes(data)        # computes diffs & broadcasts to WS clients
+         await publish_price_changes(data)  # computes diffs & broadcasts to WS clients
          await asyncio.sleep(POLL_FREQ)
      ```
 
@@ -106,7 +106,7 @@ docker compose up --build
 Run unit tests:
 
 ```bash
-uv run pytest -q
+make test
 ```
 
 ## Deployment

@@ -13,6 +13,7 @@ dependencies = [
     "python-dotenv>=1.1.0",
     "python-socketio>=5.13.0",
     "redis>=6.0.0",
+    "ruff>=0.11.8",
     "uvicorn[standard]>=0.34.2",
     "yfinance>=0.2.57",
 ]
@@ -28,3 +29,54 @@ dev = [
 [tool.pytest.ini_options]
 # pick one of: "function", "class", "module", "package", "session"
 asyncio_default_fixture_loop_scope = "function"
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.venv
+  | build
+  | dist
+  | migrations
+)/
+'''
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = [
+  ".venv",
+  "build",
+  "dist",
+]
+fix = true
+show-fixes = true
+
+[tool.ruff.lint]
+select = [
+  "E", "F", "I", "B", "W",    # basic linting & style
+  "UP",                       # upgrade Python syntax
+  "N",                        # pep8-naming
+  "SIM",                      # simplify
+  "C4",                       # comprehensions
+  "TID",                      # tidy imports
+]
+ignore = [
+  "E501",  # line length (handled by Black)
+  "W292",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+
+[tool.isort]
+profile = "black"
+line_length = 100
+known_first_party = ["app"]
+skip = [".venv", "build", "dist"]

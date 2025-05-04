@@ -1,53 +1,39 @@
-import asyncio
+import json
 import logging
-from typing import Dict, Any
-from .socket import manager
+from typing import Any
+
+import redis.asyncio as redis
+
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-class State:
+
+class AppState:
     def __init__(self):
-        self.prices: Dict[str, Dict[str, Any]] = {}
-        self.news: Dict[str, Any] = {}
-        self._lock = asyncio.Lock()
+        self.redis = redis.from_url(settings.REDIS_URL, decode_responses=True)
 
-    async def get_prices(self) -> Dict[str, Dict[str, Any]]:
-        async with self._lock:
-            return self.prices.copy()
+    async def get_prices(self) -> dict[str, dict[str, Any]]:
+        raw = await self.redis.get("prices")
+        return json.loads(raw) if raw else {}
 
-    async def update_prices(self, new_prices: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
-        async with self._lock:
-            diffs = {
-                sym: data for sym, data in new_prices.items()
-                if sym not in self.prices or self.prices[sym]['price'] != data['price']
-            }
-            self.prices = new_prices
-            return diffs
+    async def update_prices(
+        self, new_prices: dict[str, dict[str, Any]]
+    ) -> dict[str, dict[str, Any]]:
+        old_prices = await self.get_prices()
+        diffs = {
+            sym: data
+            for sym, data in new_prices.items()
+            if sym not in old_prices or old_prices[sym]["price"] != data["price"]
+        }
+        await self.redis.set("prices", json.dumps(new_prices))
+        return diffs
 
-    async def add_news_item(self, item: Dict[str, Any]) -> str:
-        async with self._lock:
-            key = str(item.get("id", len(self.news)))
-            self.news[key] = item
-            return key
+    async def add_news_item(self, item: dict[str, Any]) -> str:
+        key = str(item.get("id")) or await self.redis.incr("news:counter")
+        await self.redis.hset("news", key, json.dumps(item))
+        return key
 
-    async def get_news(self) -> Dict[str, Any]:
-        async with self._lock:
-            return self.news.copy()
-
-# Shared instance
-state = State()
-
-async def publish_price_changes(new_prices: Dict[str, Dict[str, Any]]) -> None:
-    logger.info("Checking for price diffs...")
-    diffs = await state.update_prices(new_prices)
-
-    if diffs:
-        logger.info(f"Broadcasting {len(diffs)} price updates")
-        await manager.broadcast("prices", diffs)
-    else:
-        logger.info("No price diffs to broadcast.")
-
-async def publish_news_update(news_item: Dict[str, Any]) -> None:
-    key = await state.add_news_item(news_item)
-    logger.info(f"Broadcasting news update with key={key}")
-    await manager.broadcast("news", news_item)
+    async def get_news(self) -> dict[str, Any]:
+        raw_items = await self.redis.hgetall("news")
+        return {k: json.loads(v) for k, v in raw_items.items()}

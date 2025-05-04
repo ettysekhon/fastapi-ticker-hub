@@ -1,62 +1,62 @@
 import pytest
-from app import state as state_module
-from app.state import state, publish_price_changes
+
+import app.publisher
+from app.publisher import publish_price_changes
+
 
 class DummyManager:
     def __init__(self):
         self.calls = []
 
     async def broadcast(self, room, data):
-        # record (room, data) tuples
         self.calls.append((room, data))
 
+
+@pytest.fixture
+def fake_state(monkeypatch):
+    prices = {}
+
+    class FakeAppState:
+        async def update_prices(self, new_prices):
+            nonlocal prices
+            diffs = {
+                sym: data
+                for sym, data in new_prices.items()
+                if sym not in prices or prices[sym]["price"] != data["price"]
+            }
+            prices = new_prices.copy()
+            return diffs
+
+    monkeypatch.setattr(app.publisher, "state", FakeAppState())
+    return prices
+
+
 @pytest.mark.asyncio
-async def test_publish_price_changes(monkeypatch):
-    # 1) Seed initial state
-    state.prices = {"A": {"price": 1, "ts": 0, "raw": {}}}
-
-    # 2) Swap out the real manager for our dummy
+async def test_publish_price_changes(monkeypatch, fake_state):
     dummy = DummyManager()
-    monkeypatch.setattr(state_module, 'manager', dummy)
+    monkeypatch.setattr(app.publisher, "manager", dummy)
 
-    # 3) New fetched prices, A changed, B is new
     new_prices = {
-        "A": {"price": 2, "ts": 1, "raw": {}},
-        "B": {"price": 3, "ts": 1, "raw": {}},
+        "A": {"price": 2, "ts": 1, "meta": {}},
+        "B": {"price": 3, "ts": 1, "meta": {}},
     }
 
-    # Act
     await publish_price_changes(new_prices)
 
-    # 4) State should have been updated
-    assert state.prices == new_prices
+    assert len(dummy.calls) == 2
+    broadcasted_symbols = {call[1]["symbol"] for call in dummy.calls}
+    assert broadcasted_symbols == {"A", "B"}
 
-    # 5) Exactly one broadcast call
-    assert len(dummy.calls) == 1
-
-    room, data = dummy.calls[0]
-    # Must broadcast on "prices"
-    assert room == "prices"
-
-    # Diffs should include both symbols A and B
-    assert set(data.keys()) == {"A", "B"}
 
 @pytest.mark.asyncio
-async def test_publish_price_changes_no_diff(monkeypatch):
-    # 1) Seed initial state where nothing changes
-    state.prices = {"A": {"price": 1, "ts": 0, "raw": {}}}
-
+async def test_publish_price_changes_no_diff(monkeypatch, fake_state):
     dummy = DummyManager()
-    monkeypatch.setattr(state_module, 'manager', dummy)
+    monkeypatch.setattr(app.publisher, "manager", dummy)
 
-    # 2) New is identical to old
-    new_prices = {"A": {"price": 1, "ts": 5, "raw": {}}}
+    # Populate with existing prices
+    fake_state.update({"A": {"price": 1, "ts": 0, "meta": {}}})
 
-    # Act
+    new_prices = {"A": {"price": 1, "ts": 1, "meta": {}}}
+
     await publish_price_changes(new_prices)
-
-    # State still updates behind the scenes
-    assert state.prices == new_prices
-
-    # But no broadcast was called, since price is unchanged
     assert dummy.calls == []

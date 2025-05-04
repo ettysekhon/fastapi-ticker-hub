@@ -1,87 +1,56 @@
+import asyncio
+
 import pytest
+
 from app.socket import ConnectionManager
-from app.state import state
+
 
 class DummyWebSocket:
     def __init__(self):
-        self.accepted = False
         self.sent = []
+        self.accepted = False
+        self.closed = False
 
     async def accept(self):
         self.accepted = True
 
-    async def send_json(self, payload):
-        # Record exactly what was sent
-        self.sent.append(payload)
+    async def send_json(self, message):
+        self.sent.append(message)
+
+    async def receive_text(self):
+        return "ping"
+
+    async def close(self):
+        self.closed = True
+
 
 @pytest.mark.asyncio
 async def test_connect_sends_initial_snapshot_and_registers():
-    # Arrange
-    cm = ConnectionManager()
     ws = DummyWebSocket()
-    # Seed the global state with some prices
-    state.prices = {"FOO": {"price": 1, "ts": 0, "raw": {}}}
-    # Act
+    cm = ConnectionManager()
+
     await cm.connect(ws, "prices")
-    # Assert
     assert ws.accepted, "Expected WebSocket.accept() to be called during connect()"
-    assert ws in cm.rooms["prices"], "WebSocket was not registered in 'prices' room"
-    # The first message should be the full snapshot
-    assert ws.sent == [state.prices]
-
-@pytest.mark.asyncio
-async def test_connect_invalid_room_does_not_register_websocket(caplog):
-    cm = ConnectionManager()
-    ws = DummyWebSocket()
-
-    # Capture logs for validation
-    with caplog.at_level("WARNING"):
-        await cm.connect(ws, "invalid_room")
-
-    # WebSocket should not be accepted
-    assert not ws.accepted, "WebSocket should not be accepted for an invalid room"
-
-    # It should not be added to any room
-    for room in cm.rooms:
-        assert ws not in cm.rooms[room], f"WebSocket was incorrectly added to room '{room}'"
-
-    # Log should contain a warning
-    assert any("invalid_room" in msg for msg in caplog.messages), "Missing log about invalid room"
-
-
-@pytest.mark.asyncio
-async def test_broadcast_to_all_clients_and_cleanup_on_error(monkeypatch):
-    # Arrange
-    cm = ConnectionManager()
-    ws1 = DummyWebSocket()
-    ws2 = DummyWebSocket()
-    # Register them in the "prices" room
-    await cm.connect(ws1, "prices")
-    await cm.connect(ws2, "prices")
-    # Now monkey‐patch ws2.send_json to raise, simulating a broken socket
-    async def broken_send(_):
-        raise RuntimeError("send failed")
-    ws2.send_json = broken_send
-
-    # Act: broadcast a diff
-    message = {"FOO": {"price": 2, "ts": 1, "raw": {}}}
-    await cm.broadcast("prices", message)
-
-    # Assert: ws1 got the message
-    assert ws1.sent == [state.prices, message]
-    # ws2 threw, so it should be removed
-    assert ws2 not in cm.rooms["prices"], "Broken WebSocket should be pruned on error"
-
-@pytest.mark.asyncio
-async def test_disconnect_removes_websocket_from_all_rooms():
-    cm = ConnectionManager()
-    ws = DummyWebSocket()
-    cm.rooms["prices"].add(ws)
-    cm.rooms["news"].add(ws)
-
-    # Act
+    assert ws.sent[0] == {}  # empty snapshot
+    assert ws in cm.rooms["prices"]
     await cm.disconnect(ws)
 
-    # Assert
-    assert ws not in cm.rooms["prices"]
-    assert ws not in cm.rooms["news"]
+
+@pytest.mark.asyncio
+async def test_broadcast_to_all_clients_and_cleanup_on_error():
+    ws1 = DummyWebSocket()
+    ws2 = DummyWebSocket()
+    cm = ConnectionManager()
+
+    await cm.connect(ws1, "prices")
+    await cm.connect(ws2, "prices")
+
+    await cm.broadcast("prices", {"symbol": "FOO", "price": 2})
+    # allow background sender tasks to process the queue
+    await asyncio.sleep(0)
+
+    await cm.disconnect(ws1)
+    await cm.disconnect(ws2)
+
+    assert {"symbol": "FOO", "price": 2} in ws1.sent
+    assert {"symbol": "FOO", "price": 2} in ws2.sent

@@ -1,9 +1,33 @@
 version: '3.8'
+
 services:
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
   api:
     build: .
+    ports:
+      - '8000:8000'
+    depends_on:
+      - redis
+    environment:
+      - REDIS_URL=redis://redis:6379
+    command: >
+      uv run gunicorn -k uvicorn.workers.UvicornWorker
+      --workers 2
+      --bind 0.0.0.0:8000
+      app.main:app
+
+  poller:
+    build: .
+    depends_on:
+      - api
+      - redis
     environment:
       - TICKERS=CL=F,BZ=F,GC=F,SI=F,NG=F,HO=F,RB=F,XOM,CVX,COP,OXY,EOG,KMI,PSX,VLO,USO
       - POLL_FREQ=5
-    ports:
-      - '8000:8000'
+      - REDIS_URL=redis://redis:6379
+    command: >
+      uv run python -m app.polling_worker

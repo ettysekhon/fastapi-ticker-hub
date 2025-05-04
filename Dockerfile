@@ -17,7 +17,3 @@ COPY --from=builder /app /app
 COPY . .
 RUN uv sync
 EXPOSE 8000
-CMD ["uv", "run", "gunicorn", "-k", "uvicorn.workers.UvicornWorker", \
-    "--workers", "2", \
-    "--bind", "0.0.0.0:8000", \
-    "app.main:app"]
