@@ -1,15 +1,49 @@
+import asyncio
 import json
 import logging
+from contextlib import asynccontextmanager
 
+import redis.asyncio as redis_client
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 import app.shared as shared
+from app.config import settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # open a single Redis connection and pubsub
+    redis = redis_client.from_url(settings.REDIS_URL, decode_responses=True)
+    ps = redis.pubsub()
+    await ps.subscribe("price-diffs", "news-updates")
+
+    async def reader():
+        async for msg in ps.listen():
+            if msg["type"] != "message":
+                continue
+            channel = msg["channel"]
+            payload = json.loads(msg["data"])
+            # route into the correct room
+            if channel == "price-diffs":
+                await shared.manager.broadcast("prices", payload)
+            else:
+                await shared.manager.broadcast("news", payload)
+
+    task = asyncio.create_task(reader())
+
+    yield  # now FastAPI startup is complete
+
+    # shutdown: cancel reader and clean up
+    task.cancel()
+    await ps.unsubscribe("price-diffs", "news-updates")
+    await redis.close()
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

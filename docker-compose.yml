@@ -1,17 +1,23 @@
-version: '3.8'
-
 services:
   redis:
     image: redis:7
     ports:
       - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   api:
     build: .
     ports:
-      - '8000:8000'
+      - "8000:8000"
+    restart: unless-stopped
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     environment:
       - REDIS_URL=redis://redis:6379
     command: >
@@ -22,9 +28,10 @@ services:
 
   poller:
     build: .
+    restart: unless-stopped
     depends_on:
-      - api
-      - redis
+      redis:
+        condition: service_healthy
     environment:
       - TICKERS=CL=F,BZ=F,GC=F,SI=F,NG=F,HO=F,RB=F,XOM,CVX,COP,OXY,EOG,KMI,PSX,VLO,USO
       - POLL_FREQ=5

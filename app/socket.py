@@ -39,9 +39,13 @@ class ConnectionManager:
 
     async def _sender(self, ws: WebSocket):
         queue = self.queues[ws]
+        if queue is None:
+            logger.warning("No queue found for sender task")
+            return
         try:
             while True:
                 msg = await queue.get()
+                logger.info(f"Sending message to client: {msg}")
                 await ws.send_json(msg)
         except (WebSocketDisconnect, asyncio.CancelledError):
             pass
@@ -62,7 +66,9 @@ class ConnectionManager:
     async def broadcast(self, room: str, message: dict):
         async with self.lock:
             recipients = list(self.rooms[room])
-
+            if not recipients:
+                logger.warning(f"No clients connected to room: {room}")
+                return
         for ws in recipients:
             flt = self.filters.get(ws)
             sym = message.get("symbol")
