@@ -62,8 +62,9 @@ async def poll_loop():
             new_prices = await fetch_prices(settings.tickers_list)
             if not new_prices:
                 logger.warning("No prices fetched")
-            logger.debug(f"Fetched prices: {new_prices}")
-            await publish_price_changes(new_prices)
+            else:
+                logger.debug(f"Fetched prices: {new_prices}")
+                await publish_price_changes(new_prices)
             backoff = settings.POLL_FREQ  # reset backoff after success
         except Exception:
             logger.exception("Unexpected error during polling")
@@ -74,7 +75,7 @@ async def poll_loop():
 async def fetch_prices(tickers: list[str]) -> dict[str, dict[str, Any]]:
     """
     Synchronously fetches prices using yfinance in an async-compatible way.
-    Returns { symbol: { price, ts, meta } }.
+    Returns { symbol: { price, marketTime, publishedTime, meta } }.
     """
     tickers = list(set(tickers))  # deduplicate
     if not tickers:
