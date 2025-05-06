@@ -34,7 +34,7 @@ services:
         condition: service_healthy
     environment:
       - TICKERS=CL=F,BZ=F,GC=F,SI=F,NG=F,HO=F,RB=F,XOM,CVX,COP,OXY,EOG,KMI,PSX,VLO,USO
-      - POLL_FREQ=5
+      - POLL_FREQ=3600
       - REDIS_URL=redis://redis:6379
     command: >
       uv run python -m app.polling_worker

@@ -17,4 +17,4 @@ clean:
 	rm -rf .pytest_cache .coverage coverage.xml dist
 
 start:
-	docker-compose up --build
+	docker compose up --build
