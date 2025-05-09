@@ -7,6 +7,9 @@ from app.polling import fetch_prices, poll_loop
 
 
 class DummyTicker:
+    def __init__(self, *args, **kwargs):
+        pass
+
     fast_info = type("X", (), {"last_price": 2.5})
     info = {"regularMarketPrice": 2.5, "quoteType": "equity", "regularMarketTime": 1714680000}
 
@@ -15,7 +18,7 @@ class DummyTicker:
 async def test_fetch_prices(monkeypatch):
     import yfinance
 
-    monkeypatch.setattr(yfinance, "Ticker", lambda sym: DummyTicker())
+    monkeypatch.setattr(yfinance, "Ticker", DummyTicker)
 
     result = await fetch_prices(["SYM"])
     assert "SYM" in result

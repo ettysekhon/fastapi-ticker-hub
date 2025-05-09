@@ -37,7 +37,7 @@ jobs:
           pip install uv
           uv sync
 
-      - name: Run formatter linter and pytest
+      - name: Lint and test
         run: |
           make ci
 

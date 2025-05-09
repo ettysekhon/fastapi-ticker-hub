@@ -10,7 +10,7 @@ lint:
 test:
 	./test.sh $(ARGS)
 
-ci: format lint test
+ci: lint test
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -r {} +
