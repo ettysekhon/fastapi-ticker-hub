@@ -16,27 +16,46 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # open a single Redis connection and pubsub
-    redis = redis_client.from_url(settings.REDIS_URL, decode_responses=True)
-    ps = redis.pubsub()
-    await ps.subscribe("price-diffs", "news-updates")
+    async def make_pubsub():
+        r = redis_client.from_url(
+            settings.REDIS_URL,
+            decode_responses=True,
+            socket_keepalive=True,
+            health_check_interval=30,
+        )
+        ps = r.pubsub()
+        await ps.subscribe("price-diffs", "news-updates")
+        return r, ps
+
+    redis, ps = await make_pubsub()
 
     async def reader():
-        async for msg in ps.listen():
-            if msg["type"] != "message":
-                continue
-            channel = msg["channel"]
-            payload = json.loads(msg["data"])
-            # route into the correct room
-            if channel == "price-diffs":
-                await shared.manager.broadcast("prices", payload)
-            else:
-                await shared.manager.broadcast("news", payload)
+        nonlocal redis, ps
+        while True:
+            try:
+                async for msg in ps.listen():
+                    logger.info(f"Message received : {json.dumps(msg)}")
+                    if msg["type"] != "message":
+                        continue
+                    payload = json.loads(msg["data"])
+                    room = "prices" if msg["channel"] == "price-diffs" else "news"
+                    await shared.manager.broadcast(room, payload)
+
+            except (redis_client.ConnectionError, OSError) as e:
+                logger.warning("PubSub listener dropped, reconnecting…", exc_info=e)
+                # clean up old
+                try:
+                    await ps.unsubscribe("price-diffs", "news-updates")
+                    await redis.close()
+                except Exception:
+                    pass
+
+                # re-create client + pubsub and re-subscribe
+                redis, ps = await make_pubsub()
+                continue  # restart the listen loop
 
     task = asyncio.create_task(reader())
-
     yield  # now FastAPI startup is complete
-
     # shutdown: cancel reader and clean up
     task.cancel()
     await ps.unsubscribe("price-diffs", "news-updates")

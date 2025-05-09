@@ -44,7 +44,7 @@ async def test_publish_price_changes(monkeypatch, fake_state):
     await publish_price_changes(new_prices)
 
     assert len(dummy.calls) == 2
-    broadcasted_symbols = {call[1]["symbol"] for call in dummy.calls}
+    broadcasted_symbols = {symbol for _, payload in dummy.calls for symbol in payload}
     assert broadcasted_symbols == {"A", "B"}
 
 

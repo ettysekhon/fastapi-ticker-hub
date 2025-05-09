@@ -21,13 +21,20 @@ async def publish_price_changes(new_prices: dict[str, dict[str, Any]]) -> None:
     logger.info(f"Broadcasting {len(diffs)} price updates")
 
     for symbol, data in diffs.items():
-        msg = {"symbol": symbol, **data}
+        msg = {symbol: data}
+        logger.debug("Broadcasting locally: %r", msg)
         await manager.broadcast("prices", msg)
 
     try:
-        redis = redis_client.from_url(settings.REDIS_URL, decode_responses=True)
+        redis = redis_client.from_url(
+            settings.REDIS_URL,
+            decode_responses=True,
+            socket_keepalive=True,
+            health_check_interval=30,
+        )
         for symbol, data in diffs.items():
-            msg = {"symbol": symbol, **data}
+            msg = {symbol: data}
+            logger.info(f"Publishing price diff for symbol {symbol}")
             await redis.publish("price-diffs", json.dumps(msg))
     except Exception:
         logger.warning("Failed to publish to Redis; continuing without blocking", exc_info=True)
@@ -38,7 +45,12 @@ async def publish_news_update(news_item: dict[str, Any]) -> None:
     logger.info(f"Broadcasting news update with key={key}")
 
     try:
-        redis = redis_client.from_url(settings.REDIS_URL, decode_responses=True)
+        redis = redis_client.from_url(
+            settings.REDIS_URL,
+            decode_responses=True,
+            socket_keepalive=True,
+            health_check_interval=30,
+        )
         await redis.publish("news-updates", json.dumps(news_item))
     except Exception:
         logger.warning("Failed to publish news to Redis; continuing", exc_info=True)

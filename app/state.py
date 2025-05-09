@@ -2,7 +2,7 @@ import json
 import logging
 from typing import Any
 
-import redis.asyncio as redis
+import redis.asyncio as redis_client
 
 from app.config import settings
 
@@ -11,22 +11,45 @@ logger = logging.getLogger(__name__)
 
 class AppState:
     def __init__(self):
-        self.redis = redis.from_url(settings.REDIS_URL, decode_responses=True)
+        self.redis = redis_client.from_url(
+            settings.REDIS_URL,
+            decode_responses=True,
+            socket_keepalive=True,
+            health_check_interval=30,
+        )
 
-    async def get_prices(self) -> dict[str, dict[str, Any]]:
-        raw = await self.redis.get("prices")
+    async def get_prices(self) -> dict[str, dict]:
+        try:
+            raw = await self.redis.get("prices")
+        except (redis_client.exceptions.ConnectionError, OSError) as e:
+            logger.warning("Redis get_prices failed, reconnecting…", exc_info=e)
+            self.redis = redis_client.from_url(
+                settings.REDIS_URL,
+                decode_responses=True,
+                socket_keepalive=True,
+                health_check_interval=30,
+            )
+            raw = await self.redis.get("prices")
         return json.loads(raw) if raw else {}
 
-    async def update_prices(
-        self, new_prices: dict[str, dict[str, Any]]
-    ) -> dict[str, dict[str, Any]]:
+    async def update_prices(self, new_prices: dict[str, dict]) -> dict[str, dict]:
         old_prices = await self.get_prices()
         diffs = {
             sym: data
             for sym, data in new_prices.items()
             if sym not in old_prices or old_prices[sym]["price"] != data["price"]
         }
-        await self.redis.set("prices", json.dumps(new_prices))
+        try:
+            await self.redis.set("prices", json.dumps(new_prices))
+        except (redis_client.exceptions.ConnectionError, OSError) as e:
+            logger.warning("Redis set failed, reconnecting…", exc_info=e)
+            self.redis = redis_client.from_url(
+                settings.REDIS_URL,
+                decode_responses=True,
+                socket_keepalive=True,
+                health_check_interval=30,
+            )
+            await self.redis.set("prices", json.dumps(new_prices))
         return diffs
 
     async def add_news_item(self, item: dict[str, Any]) -> str:
