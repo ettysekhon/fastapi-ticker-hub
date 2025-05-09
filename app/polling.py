@@ -1,19 +1,19 @@
 import asyncio
-import json
 import logging
 import time
 from datetime import UTC, datetime
 from typing import Any
 
 import yfinance as yf
-from fastapi.concurrency import run_in_threadpool
 
 # https://github.com/ranaroussi/yfinance/issues/2422
 from curl_cffi import requests
-session = requests.Session(impersonate="chrome")
+from fastapi.concurrency import run_in_threadpool
 
 from .config import settings
 from .publisher import publish_price_changes
+
+session = requests.Session(impersonate="chrome")
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +94,9 @@ async def fetch_prices(tickers: list[str]) -> dict[str, dict[str, Any]]:
 
         for symbol in tickers:
             try:
-                t = yf.Ticker(symbol, session=session)  # consider caching if fetching many tickers at high frequency
+                t = yf.Ticker(
+                    symbol, session=session
+                )  # consider caching if fetching many tickers at high frequency
                 info = t.info or {}
                 meta = slim_info(info)
                 price = meta.get("price")
