@@ -15,7 +15,7 @@ dependencies = [
     "redis>=6.0.0",
     "ruff>=0.11.8",
     "uvicorn[standard]>=0.34.2",
-    "yfinance>=0.2.57",
+    "yfinance>=0.2.59",
 ]
 
 [dependency-groups]

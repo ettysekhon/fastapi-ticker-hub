@@ -33,7 +33,7 @@ services:
       redis:
         condition: service_healthy
     environment:
-      - TICKERS=CL=F,BZ=F,GC=F,SI=F,NG=F,HO=F,RB=F,XOM,CVX,COP,OXY,EOG,KMI,PSX,VLO,USO
+      - TICKERS=CL=F,BZ=F,NG=F,HO=F,RB=F,GC=F,SI=F,PL=F,PA=F,HG=F,ZC=F,ZS=F,ZW=F,KC=F,CC=F,SB=F,LE=F,HE=F,XOM,CVX,COP,OXY,EOG,KMI,PSX,VLO,SLB,HAL,NOV,BP,TOT,USO,BNO,DBC,GSG,GLD,SLV,PPLT,PALL
       - POLL_FREQ=3600
       - REDIS_URL=redis://redis:6379
     command: >
