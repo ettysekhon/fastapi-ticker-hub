@@ -42,20 +42,31 @@ jobs:
           make ci
 
   docker-build:
-    name: Build Docker image
+    name: Build Docker images
     runs-on: ubuntu-latest
     needs: test
     steps:
       - name: Check out code
         uses: actions/checkout@v4
 
-      - name: Build Docker image
+      - name: Build API Docker image
         uses: docker/build-push-action@v4
         with:
           context: .
-          push: false
-          tags: fastapi-ticker-hub:ci
+          file:    packages/api/Dockerfile
+          push:    false
+          tags:    fastapi-ticker-hub-api:ci
 
-      - name: Verify image exists
-        run: |
-          docker image inspect fastapi-ticker-hub:ci
+      - name: Build Poller Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file:    packages/poller/Dockerfile
+          push:    false
+          tags:    fastapi-ticker-hub-poller:ci
+
+      - name: Verify API image exists
+        run: docker image inspect fastapi-ticker-hub-api:ci
+
+      - name: Verify Poller image exists
+        run: docker image inspect fastapi-ticker-hub-poller:ci

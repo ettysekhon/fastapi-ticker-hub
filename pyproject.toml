@@ -1,34 +1,32 @@
 [project]
 name = "fastapi-ticker-hub"
 version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
 requires-python = ">=3.13"
-dependencies = [
-    "fastapi>=0.115.12",
-    "gunicorn>=23.0.0",
-    "httpx>=0.28.1",
-    "pydantic>=2.11.4",
-    "pydantic-settings>=2.9.1",
-    "python-dotenv>=1.1.0",
-    "python-socketio>=5.13.0",
-    "redis>=6.0.0",
-    "ruff>=0.11.8",
-    "uvicorn[standard]>=0.34.2",
-    "yfinance>=0.2.59",
-]
+dependencies = []
+
+[tool.uv.workspace]
+members = ["packages/*"]
 
 [dependency-groups]
 dev = [
     "black>=25.1.0",
+    "httpx>=0.28.1",
     "isort>=6.0.1",
     "pytest>=8.3.5",
     "pytest-asyncio>=0.26.0",
+    "redis>=6.0.0",
+    "ruff>=0.11.9",
+    "redis>=6.0.0",
+    "fastapi>=0.115.12",
+    "yfinance>=0.2.59",
+    "python-dotenv>=1.1.0",
 ]
 
 [tool.pytest.ini_options]
 # pick one of: "function", "class", "module", "package", "session"
 asyncio_default_fixture_loop_scope = "function"
+junit_family = "xunit2"
+addopts = "--junitxml=test-results.xml"
 
 [tool.black]
 line-length = 100
@@ -74,9 +72,8 @@ quote-style = "double"
 indent-style = "space"
 line-ending = "lf"
 
-
 [tool.isort]
 profile = "black"
 line_length = 100
-known_first_party = ["app"]
+known_first_party = ["api", "poller"]
 skip = [".venv", "build", "dist"]

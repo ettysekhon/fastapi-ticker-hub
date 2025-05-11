@@ -1,5 +1,5 @@
 {
-  "python.defaultInterpreterPath": ".venv/bin/python",
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
   "python.formatting.provider": "black",
   "python.formatting.blackArgs": ["--line-length", "100"],
   "python.linting.enabled": true,
@@ -11,8 +11,12 @@
     "source.fixAll": "always"
   },
   "ruff.enable": true,
-  "ruff.path": ".venv/bin/ruff",
+  "ruff.path": ["${workspaceFolder}/.venv/bin/ruff"],
   "terminal.integrated.env.linux": {
     "PYTHONPATH": "${workspaceFolder}"
-  }
+  },
+  "python.analysis.extraPaths": [
+    "packages/api/src",
+    "packages/poller/src"
+  ]
 }

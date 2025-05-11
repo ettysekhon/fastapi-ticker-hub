@@ -1,0 +1,28 @@
+[project]
+name = "api"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Etty Sekhon", email = "etty.sekhon@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+  "fastapi>=0.115.12",
+  "redis>=6.0.0",
+  "pydantic>=2.11.4",
+  "pydantic-settings>=2.9.1",
+  "python-dotenv>=1.1.0",
+  "uvicorn[standard]>=0.34.2",
+]
+
+packages = [
+  { include = "api", from = "src" }
+]
+
+[project.scripts]
+api = "api:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

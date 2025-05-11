@@ -1,0 +1,25 @@
+# Ignore local virtualenvs
+.venv/
+venv/
+env/
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+
+# Git and CI
+.git
+.gitignore
+
+# Tests
+tests/
+
+# Docker tooling
+docker-compose.yml
+Dockerfile
+
+# Editor configs, logs, etc.
+*.log
+.idea/
+.vscode/

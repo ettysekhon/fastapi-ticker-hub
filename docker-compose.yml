@@ -3,38 +3,25 @@ services:
     image: redis:7
     ports:
       - "6379:6379"
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile
     ports:
       - "8000:8000"
-    restart: unless-stopped
-    depends_on:
-      redis:
-        condition: service_healthy
     environment:
-      - REDIS_URL=redis://redis:6379
-    command: >
-      uv run gunicorn -k uvicorn.workers.UvicornWorker
-      --workers 2
-      --bind 0.0.0.0:8000
-      app.main:app
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - redis
 
   poller:
-    build: .
-    restart: unless-stopped
-    depends_on:
-      redis:
-        condition: service_healthy
+    build:
+      context: .
+      dockerfile: packages/poller/Dockerfile
     environment:
       - TICKERS=CL=F,BZ=F,NG=F,HO=F,RB=F,GC=F,SI=F,PL=F,PA=F,HG=F,ZC=F,ZS=F,ZW=F,KC=F,CC=F,SB=F,LE=F,HE=F,XOM,CVX,COP,OXY,EOG,KMI,PSX,VLO,SLB,HAL,NOV,BP,TOT,USO,BNO,DBC,GSG,GLD,SLV,PPLT,PALL
       - POLL_FREQ=3600
       - REDIS_URL=redis://redis:6379
-    command: >
-      uv run python -m app.polling_worker
+    depends_on:
+      - redis
