@@ -2,7 +2,12 @@
 
 [![CI](https://github.com/ettysekhon/fastapi-ticker-hub/actions/workflows/ci.yml/badge.svg)](https://github.com/ettysekhon/fastapi-ticker-hub/actions/workflows/ci.yml)
 
-A minimal FastAPI service that polls market prices (and news) and serves them via REST endpoints and raw WebSockets. Additionally it supports customised subscriptions with per-connection watchlist.
+A minimal, Kubernetes and Docker friendly mono-repo consisting of two services:
+
+- **poller**: periodically fetches market data (via yfinance), computes diffs, publishes to Redis pub/sub, and maintains a full snapshot in Redis.  
+- **api**: exposes REST endpoints and WebSockets, serving the Redis snapshot and real-time diffs to clients (with optional per-connection watchlists).
+
+Project structure using packages follows [uv workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/) guidance.
 
 ---
 
@@ -10,82 +15,54 @@ A minimal FastAPI service that polls market prices (and news) and serves them vi
 
 ```js
 const socket = new WebSocket("ws://localhost:8000/ws/prices");
-
-// Handle errors
-socket.addEventListener("error", (event) => {
-  console.log("WebSocket error:", event);
-});
-
-// Receive initial snapshot or updates (diffs)
-socket.addEventListener("message", (event) => {
-  try {
-    const payload = JSON.parse(event.data);
-    console.log("Price update:", payload);
-  } catch (err) {
-    console.warn("Non-JSON message:", event.data);
-  }
-});
-
-// Keep connection alive with heartbeat
 socket.addEventListener("open", () => {
-  console.log("WebSocket open");
   setInterval(() => socket.send("ping"), 30000);
-  // Optionally, set a custom watchlist right after connecting:
-  const myWatchlist = { watchlist: ["AAPL", "MSFT"] };
-  socket.send(JSON.stringify(myWatchlist));
+  socket.send(JSON.stringify({ watchlist: ["AAPL", "MSFT"] }));
 });
-
-socket.addEventListener("close", (event) => {
-  console.log("WebSocket close:", event);
+socket.addEventListener("message", evt => {
+  try { console.log("Update:", JSON.parse(evt.data)); }
+  catch { console.warn("Non-JSON:", evt.data); }
 });
+socket.addEventListener("close", () => console.log("Closed"));
+socket.addEventListener("error", e => console.error("WS error", e));
 ```
 
 ## Prerequisites
 
 - Python 3.13+ installed
-- Docker & Docker Compose (for containerised mode)
+- Docker & Docker Compose
+- make (for convenience)
 
 ## How It Works
 
-1. **Configuration**  
-   - Reads `TICKERS`, `POLL_FREQ` and `REDIS_URL` from environment (or `.env`).  
-   - Builds a list of symbols to poll.
-
-2. **Polling Loop (poller service)**  
-   - On startup of the poller service (when using Docker Compose), an asyncio background task is launched that:
+1. **poller service**  
+   - `settings.py` reads `TICKERS`, `POLL_FREQ`, `REDIS_URL` from environment / `.env`  .
+   - `main.py` launches one asyncio task per symbol:
 
      ```python
-     while True:
-        # runs yfinance calls in a threadpool
-        data = await fetch_prices(TICKERS)
-        # computes diffs & broadcasts to WS clients
-        await publish_price_changes(data)
-        await asyncio.sleep(POLL_FREQ)
+      while True:
+        info = await to_thread(yf.Ticker(sym).info)
+        await update_prices({ sym: data })
+        await redis.publish("price-diffs", json.dumps(payload))
+        await sleep(POLL_FREQ)
      ```
 
-   - Uses exponential backoff on errors, reset after successful fetch.
+   - Maintains an in-memory snapshot map for fast merges, atomically `SET prices` in Redis.
    - Stores the latest full snapshot in a Redis hash (key prices).
    - Publishes incremental diffs on a Redis pub/sub channel (prices).
 
-3. **REST API (api service)**  
-   - `GET /tickers` returns the current snapshot of all prices.  
-   - `GET /tickers/{symbol}` returns a single symbol's latest data.
+2. **api service (REST)**
+   - `GET /tickers` - full snapshot from Redis (`GET prices`)
+   - `GET /tickers/{symbol}` - one symbol or 404
 
-4. **WebSockets & Watchlists (api service)**  
-   - Two endpoints:  
-     - `/ws/prices` — publish real-time price diffs  
-     - `/ws/news`   — publish any news items  
-   - **Default:** on connect, clients receive the full current state of all symbols, then only diffs.
-   - **Per-connection watchlist:** clients may send:
+3. **api service (WebSockets)**
+    - `/ws/prices` — on connect, send full snapshot then stream diff messages
+    - `/ws/news`   — same pattern for news items
+    - Clients may send `{ "watchlist": ["SYM",…] }` to receive only those symbols.
 
     ```javascript
     { "watchlist": ["AAPL", "MSFT", ...] }
     ```
-
-    to subscribe only to those symbols. They then receive:
-
-    - A fresh filtered snapshot from Redis.
-    - Subsequent diffs only for symbols in their watchlist.
 
 ## Quick start (Docker Compose)
 
@@ -94,8 +71,6 @@ Simply clone the repo and run make start:
 ```bash
 make start
 ```
-
-which simply builds and runs with `docker compose up --build`. All dependencies are declared in `pyproject.toml` and `uv.lock` and are installed via [uv](https://docs.astral.sh/uv/getting-started/installation/) in the `Dockerfile`.
 
 - API available at `http://localhost:8000`
 - WebSocket endpoints at `ws://localhost:8000/ws/prices` and `/ws/news`
@@ -107,8 +82,3 @@ Run unit tests:
 ```bash
 make test
 ```
-
-## Deployment
-
-- On-premise: use Docker Compose or your orchestrator with the same image
-- Cloud: push to registry and deploy (Kubernetes, ECS, Cloud Run, etc.)
