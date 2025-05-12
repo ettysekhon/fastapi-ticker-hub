@@ -7,7 +7,12 @@ import redis.asyncio as aioredis
 from .settings import REDIS_URL
 
 logger = logging.getLogger(__name__)
-_redis = aioredis.from_url(REDIS_URL, decode_responses=True)
+_redis = aioredis.from_url(
+    REDIS_URL,
+    decode_responses=True,
+    socket_keepalive=True,
+    health_check_interval=30,
+)
 
 # In-memory cache of the full snapshot
 _snapshot: dict[str, dict[str, Any]] = {}

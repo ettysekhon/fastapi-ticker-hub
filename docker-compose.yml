@@ -20,8 +20,8 @@ services:
       context: .
       dockerfile: packages/poller/Dockerfile
     environment:
-      - TICKERS=CL=F,BZ=F,NG=F,HO=F,RB=F,GC=F,SI=F,PL=F,PA=F,HG=F,ZC=F,ZS=F,ZW=F,KC=F,CC=F,SB=F,LE=F,HE=F,XOM,CVX,COP,OXY,EOG,KMI,PSX,VLO,SLB,HAL,NOV,BP,TOT,USO,BNO,DBC,GSG,GLD,SLV,PPLT,PALL
-      - POLL_FREQ=3600
+      - TICKERS=CL=F,BZ=F,NG=F,HO=F,RB=F,GC=F,SI=F,PL=F,PA=F,HG=F,ZC=F,ZS=F,ZW=F,KC=F,CC=F,SB=F,LE=F,HE=F,XOM,CVX,COP,OXY,EOG,KMI,PSX,VLO,SLB,HAL,NOV,BP,USO,BNO,DBC,GSG,GLD,SLV,PPLT,PALL
+      - POLL_FREQ=1800
       - REDIS_URL=redis://redis:6379
     depends_on:
       - redis

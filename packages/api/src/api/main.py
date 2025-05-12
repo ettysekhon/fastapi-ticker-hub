@@ -4,6 +4,7 @@ import logging
 import redis.asyncio as aioredis
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 from .settings import REDIS_URL
 from .state import get_prices
@@ -23,7 +24,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-redis = aioredis.from_url(REDIS_URL, decode_responses=True)
+redis = aioredis.from_url(
+    REDIS_URL,
+    decode_responses=True,
+    socket_keepalive=True,
+    health_check_interval=30,
+)
 CHANNEL = "price-diffs"
 
 
@@ -61,16 +67,33 @@ async def websocket_prices(ws: WebSocket):
     logger.info(f"WebSocket client connected, subscribed to {CHANNEL}")
 
     try:
-        async for msg in pubsub.listen():
-            if msg.get("type") != "message":
+        while True:
+            try:
+                async for msg in pubsub.listen():
+                    if msg.get("type") != "message":
+                        continue
+                    data = json.loads(msg["data"])
+                    await ws.send_json(data)
+                break
+
+            except (RedisConnectionError, OSError) as err:
+                logger.warning("Redis PubSub dropped, reconnecting…", exc_info=err)
+                try:
+                    await pubsub.unsubscribe(CHANNEL)
+                    await pubsub.close()
+                except Exception:
+                    pass
+                pubsub = redis.pubsub()
+                await pubsub.subscribe(CHANNEL)
                 continue
-            data = json.loads(msg["data"])
-            await ws.send_json(data)
 
     except WebSocketDisconnect:
         logger.info("WebSocket client disconnected")
 
     finally:
-        await pubsub.unsubscribe(CHANNEL)
-        await pubsub.close()
+        try:
+            await pubsub.unsubscribe(CHANNEL)
+            await pubsub.close()
+        except Exception:
+            pass
         logger.info("Cleaned up Redis subscription")

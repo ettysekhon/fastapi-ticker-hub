@@ -82,3 +82,13 @@ Run unit tests:
 ```bash
 make test
 ```
+
+There is also an Azure CI pipeline that will run lint checks and execute tests.
+
+## Linting & Formatting
+
+The project uses [Ruff](https://docs.astral.sh/ruff/) for linting, formatting and sorting imports for code consistency. Simply run:
+
+```bash
+make format
+```

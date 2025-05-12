@@ -14,10 +14,6 @@ def fake_snapshot(monkeypatch):
 
     monkeypatch.setattr(api.state, "get_prices", _fake)
     monkeypatch.setattr(api.main, "get_prices", _fake)
-    # async def _fake():
-    #     return {"AAPL": {"price": 150.0}}
-
-    # monkeypatch.setattr(api.state, "get_prices", _fake)
 
 
 def test_healthz():

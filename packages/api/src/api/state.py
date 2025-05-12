@@ -1,5 +1,3 @@
-# services/api/src/api/state.py
-
 import json
 import logging
 
@@ -9,7 +7,6 @@ from .settings import REDIS_URL
 
 logger = logging.getLogger(__name__)
 
-# single Redis client
 _redis = redis_client.from_url(
     REDIS_URL,
     decode_responses=True,
