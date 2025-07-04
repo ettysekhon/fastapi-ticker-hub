@@ -54,6 +54,8 @@ socket.addEventListener("error", e => console.error("WS error", e));
 2. **api service (REST)**
    - `GET /tickers` - full snapshot from Redis (`GET prices`)
    - `GET /tickers/{symbol}` - one symbol or 404
+   - `GET /tickers/{symbol}` - one symbol or 404
+   - `GET /tickers/{symbol}/history?start={start_date}&end={end_date}` - one symbol or 404 - start and end date in format YYYY-MM-DD (2025-06-01)
 
 3. **api service (WebSockets)**
     - `/ws/prices` — on connect, send full snapshot then stream diff messages
