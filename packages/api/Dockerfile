@@ -2,10 +2,7 @@
 FROM python:3.13-alpine AS builder
 WORKDIR /app
 
-RUN apk add --no-cache ca-certificates \
-    && update-ca-certificates \
-    && sed -i 's/https:/http:/' /etc/apk/repositories \
-    && apk add --no-cache gcc musl-dev libffi-dev
+RUN apk add --no-cache gcc musl-dev libffi-dev
 
 RUN python3 -m venv /root/.local
 ENV PATH=/root/.local/bin:$PATH
@@ -19,8 +16,7 @@ RUN pip install --upgrade pip --no-cache-dir \
 FROM python:3.13-alpine
 WORKDIR /app
 
-RUN apk add --no-cache ca-certificates libffi \
-    && update-ca-certificates
+RUN apk add --no-cache libffi
 
 RUN pip install --no-cache-dir uv
 
